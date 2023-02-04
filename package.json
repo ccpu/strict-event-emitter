@@ -1,5 +1,5 @@
 {
-  "name": "strict-event-emitter",
+  "name": "strict-event-emitter-fork",
   "version": "0.4.4",
   "description": "Type-safe implementation of EventEmitter for browser and Node.js",
   "main": "lib/index.js",
