@@ -1,16 +1,13 @@
 import { MemoryLeakError } from './MemoryLeakError'
-
-export type EventMap = {
-  [eventName: string]: Array<unknown>
-}
-
-export type InternalEventNames = 'newListener' | 'removeListener'
-
-export type InternalListener<Events extends EventMap> = Listener<
-  [eventName: keyof Events, listener: Listener<Array<unknown>>]
->
-
-export type Listener<Data extends Array<unknown>> = (...data: Data) => void
+import {
+  EventMap,
+  Listener,
+  ExternalInternalEventKeys,
+  WithEventData,
+  EventKeys,
+  InternalListener,
+  InternalEventKeys,
+} from './typings'
 
 /**
  * Node.js-compatible implementation of `EventEmitter`.
@@ -41,15 +38,14 @@ export class Emitter<Events extends EventMap> {
   }
 
   private _emitInternalEvent(
-    internalEventName: InternalEventNames,
-    eventName: keyof Events,
+    internalEventName: InternalEventKeys<Events>,
+    eventName: EventKeys<Events>,
     listener: Listener<Array<unknown>>
   ): void {
     this.emit(
       internalEventName,
       // Anything to make TypeScript happy.
-      ...([eventName, listener] as Events['newListener'] &
-        Events['removeListener'])
+      ...([eventName, listener] as any)
     )
   }
 
@@ -60,9 +56,9 @@ export class Emitter<Events extends EventMap> {
   }
 
   private _removeListener<EventName extends keyof Events>(
-    listeners: Array<Listener<Events[EventName]>>,
-    listener: Listener<Events[EventName]>
-  ): Array<Listener<Events[EventName]>> {
+    listeners: Array<Listener<WithEventData<Events, EventName>>>,
+    listener: Listener<WithEventData<Events, EventName>>
+  ): Array<Listener<WithEventData<Events, EventName>>> {
     const index = listeners.indexOf(listener)
 
     if (index > -1) {
@@ -72,11 +68,11 @@ export class Emitter<Events extends EventMap> {
     return []
   }
 
-  private _wrapOnceListener<EventName extends keyof Events>(
+  private _wrapOnceListener<EventName extends EventKeys<Events>>(
     eventName: EventName,
-    listener: Listener<Events[EventName]>
-  ): Listener<Events[EventName]> {
-    const onceListener = (...data: Events[keyof Events]) => {
+    listener: Listener<WithEventData<Events, EventName>>
+  ): Listener<WithEventData<Events, EventName>> {
+    const onceListener = (...data: WithEventData<Events, EventName>) => {
       this.removeListener(eventName, onceListener)
       listener.apply(this, data)
     }
@@ -115,9 +111,9 @@ export class Emitter<Events extends EventMap> {
    * const emitter = new Emitter<{ hello: [string] }>()
    * emitter.emit('hello', 'John')
    */
-  public emit<EventName extends keyof Events>(
+  public emit<EventName extends ExternalInternalEventKeys<Events>>(
     eventName: EventName,
-    ...data: Events[EventName]
+    ...data: WithEventData<Events, EventName>
   ): boolean {
     const listeners = this._getListeners(eventName)
     listeners.forEach((listener) => {
@@ -128,16 +124,16 @@ export class Emitter<Events extends EventMap> {
   }
 
   public addListener(
-    eventName: InternalEventNames,
+    eventName: InternalEventKeys<Events>,
     listener: InternalListener<Events>
   ): this
-  public addListener<EventName extends keyof Events>(
+  public addListener<EventName extends EventKeys<Events>>(
     eventName: EventName,
-    listener: Listener<Events[EventName]>
+    listener: Listener<WithEventData<Events, EventName>>
   ): this
   public addListener(
-    eventName: InternalEventNames | keyof Events,
-    listener: InternalListener<Events> | Listener<Events[any]>
+    eventName: ExternalInternalEventKeys<Events>,
+    listener: InternalListener<Events> | Listener<WithEventData<Events, any>>
   ): this {
     // Emit the `newListener` event before adding the listener.
     this._emitInternalEvent('newListener', eventName, listener)
@@ -164,31 +160,31 @@ export class Emitter<Events extends EventMap> {
   }
 
   public on(
-    eventName: InternalEventNames,
+    eventName: InternalEventKeys<Events>,
     listener: InternalListener<Events>
   ): this
-  public on<EventName extends keyof Events>(
+  public on<EventName extends EventKeys<Events>>(
     eventName: EventName,
-    listener: Listener<Events[EventName]>
+    listener: Listener<WithEventData<Events, EventName>>
   ): this
-  public on<EventName extends keyof Events>(
-    eventName: 'removeListener' | EventName,
-    listener: Listener<any>
+  public on<EventName extends ExternalInternalEventKeys<Events>>(
+    eventName: EventName,
+    listener: any
   ): this {
     return this.addListener(eventName, listener)
   }
 
   public once(
-    eventName: InternalEventNames,
+    eventName: InternalEventKeys<Events>,
     listener: InternalListener<Events>
   ): this
-  public once<EventName extends keyof Events>(
+  public once<EventName extends EventKeys<Events>>(
     eventName: EventName,
-    listener: Listener<Events[EventName]>
+    listener: Listener<WithEventData<Events, EventName>>
   ): this
-  public once<EventName extends keyof Events>(
-    eventName: InternalEventNames | EventName,
-    listener: Listener<any>
+  public once<EventName extends ExternalInternalEventKeys<Events>>(
+    eventName: EventName,
+    listener: any
   ): this {
     return this.addListener(
       eventName,
@@ -197,16 +193,16 @@ export class Emitter<Events extends EventMap> {
   }
 
   public prependListener(
-    eventName: InternalEventNames,
+    eventName: InternalEventKeys<Events>,
     listener: InternalListener<Events>
   ): this
-  public prependListener<EventName extends keyof Events>(
+  public prependListener<EventName extends EventKeys<Events>>(
     eventName: EventName,
-    listener: Listener<Events[EventName]>
+    listener: Listener<WithEventData<Events, EventName>>
   ): this
-  public prependListener(
-    eventName: InternalEventNames | keyof Events,
-    listener: Listener<any>
+  public prependListener<EventName extends ExternalInternalEventKeys<Events>>(
+    eventName: EventName,
+    listener: any
   ): this {
     const listeners = this._getListeners(eventName)
 
@@ -221,17 +217,16 @@ export class Emitter<Events extends EventMap> {
   }
 
   public prependOnceListener(
-    eventName: InternalEventNames,
+    eventName: InternalEventKeys<Events>,
     listener: InternalListener<Events>
   ): this
-  public prependOnceListener<EventName extends keyof Events>(
+  public prependOnceListener<EventName extends EventKeys<Events>>(
     eventName: EventName,
-    listener: Listener<Events[EventName]>
+    listener: Listener<WithEventData<Events, EventName>>
   ): this
-  public prependOnceListener(
-    eventName: InternalEventNames | keyof Events,
-    listener: Listener<any>
-  ): this {
+  public prependOnceListener<
+    EventName extends ExternalInternalEventKeys<Events>
+  >(eventName: EventName, listener: any): this {
     return this.prependListener(
       eventName,
       this._wrapOnceListener(eventName, listener)
@@ -239,16 +234,16 @@ export class Emitter<Events extends EventMap> {
   }
 
   public removeListener(
-    eventName: InternalEventNames,
+    eventName: InternalEventKeys<Events>,
     listener: InternalListener<Events>
   ): this
-  public removeListener<EventName extends keyof Events>(
+  public removeListener<EventName extends EventKeys<Events>>(
     eventName: EventName,
-    listener: Listener<Events[EventName]>
+    listener: Listener<WithEventData<Events, EventName>>
   ): this
-  public removeListener(
-    eventName: InternalEventNames | keyof Events,
-    listener: Listener<any>
+  public removeListener<EventName extends ExternalInternalEventKeys<Events>>(
+    eventName: EventName,
+    listener: any
   ): this {
     const listeners = this._getListeners(eventName)
 
@@ -264,12 +259,12 @@ export class Emitter<Events extends EventMap> {
   }
 
   public off(
-    eventName: InternalEventNames,
+    eventName: InternalEventKeys<Events>,
     listener: InternalListener<Events>
   ): this
-  public off<EventName extends keyof Events>(
+  public off<EventName extends EventKeys<Events>>(
     eventName: EventName,
-    listener: Listener<Events[EventName]>
+    listener: Listener<WithEventData<Events, EventName>>
   ): this
   /**
    * Alias for `emitter.removeListener()`.
@@ -277,19 +272,19 @@ export class Emitter<Events extends EventMap> {
    * @example
    * emitter.off('hello', listener)
    */
-  public off(
-    eventName: InternalEventNames | keyof Events,
-    listener: Listener<any>
+  public off<EventName extends ExternalInternalEventKeys<Events>>(
+    eventName: EventName,
+    listener: any
   ): this {
     return this.removeListener(eventName, listener)
   }
 
-  public removeAllListeners(eventName?: InternalEventNames): this
-  public removeAllListeners<EventName extends keyof Events>(
+  public removeAllListeners(eventName?: InternalEventKeys<Events>): this
+  public removeAllListeners<EventName extends EventKeys<Events>>(
     eventName?: EventName
   ): this
   public removeAllListeners(
-    eventName?: InternalEventNames | keyof Events
+    eventName?: InternalEventKeys<Events> | EventKeys<Events>
   ): this {
     if (eventName) {
       this.events.delete(eventName)
@@ -300,31 +295,33 @@ export class Emitter<Events extends EventMap> {
     return this
   }
 
-  public listeners(eventName: InternalEventNames): Array<Listener<any>>
-  public listeners<EventName extends keyof Events>(
+  public listeners(eventName: InternalEventKeys<Events>): Array<Listener<any>>
+  public listeners<EventName extends EventKeys<Events>>(
     eventName: EventName
-  ): Array<Listener<Events[EventName]>>
+  ): Array<Listener<WithEventData<Events, EventName>>>
   /**
    * Returns a copy of the array of listeners for the event named `eventName`.
    */
-  public listeners(eventName: InternalEventNames | keyof Events) {
+  public listeners(eventName: InternalEventKeys<Events> | EventKeys<Events>) {
     return Array.from(this._getListeners(eventName))
   }
 
-  public listenerCount(eventName: InternalEventNames): number
-  public listenerCount<EventName extends keyof Events>(
+  public listenerCount(eventName: InternalEventKeys<Events>): number
+  public listenerCount<EventName extends EventKeys<Events>>(
     eventName: EventName
   ): number
   /**
    * Returns the number of listeners listening to the event named `eventName`.
    */
-  public listenerCount(eventName: InternalEventNames | keyof Events): number {
+  public listenerCount(
+    eventName: InternalEventKeys<Events> | EventKeys<Events>
+  ): number {
     return this._getListeners(eventName).length
   }
 
-  public rawListeners<EventName extends keyof Events>(
+  public rawListeners<EventName extends EventKeys<Events>>(
     eventName: EventName
-  ): Array<Listener<Events[EventName]>> {
+  ): Array<Listener<WithEventData<Events, EventName>>> {
     return this.listeners(eventName)
   }
 }
